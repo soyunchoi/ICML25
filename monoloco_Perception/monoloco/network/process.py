@@ -274,8 +274,25 @@ def extract_outputs(outputs, tasks=()):
         assert isinstance(tasks, tuple), "tasks need to be a tuple"
         return [dic_out[task] for task in tasks]
 
-    # Preprocess the tensor
-    # AV_H, AV_W, AV_L, HWL_STD = 1.72, 0.75, 0.68, 0.1
+    # 중복 감지 제거
+    x = dic_out['x'].detach().cpu()
+    y = dic_out['y'].detach().cpu()
+    
+    # 같은 위치에 있는 감지 결과 제거 (threshold 값으로 판단)
+    unique_indices = []
+    used_positions = set()
+    
+    for i in range(len(x)):
+        pos = (round(float(x[i][0]), 1), round(float(y[i][0]), 1))  # 소수점 첫째자리까지만 비교
+        if pos not in used_positions:
+            used_positions.add(pos)
+            unique_indices.append(i)
+    
+    # 중복이 제거된 인덱스로 모든 텐서 필터링
+    for key in dic_out:
+        if torch.is_tensor(dic_out[key]):
+            dic_out[key] = dic_out[key][unique_indices]
+
     # x, y 좌표 필터링
     for key in ['x', 'y']:
         if key in dic_out:
@@ -287,38 +304,31 @@ def extract_outputs(outputs, tasks=()):
     bi = unnormalize_bi(dic_out['d'])
     dic_out['bi'] = bi
     dic_out = {key: el.detach().cpu() for key, el in dic_out.items()}
-    # x = to_cartesian(outputs[:, 0:3].detach().cpu(), mode='x')
-    # y = to_cartesian(outputs[:, 0:3].detach().cpu(), mode='y')
-    
+
     # 3D 좌표 계산
-    x = dic_out['x']
-    y = dic_out['y']
-    d = dic_out['d'][:, 0:1]
-    
-    # 모든 텐서를 동일한 batch size로 맞춤
-    batch_size = x.size(0)
-    
-    # 계산 전에 shape 맞추기
+    batch_size = len(unique_indices)  # 중복 제거된 감지 수
+    x = dic_out['x'][:batch_size]
+    y = dic_out['y'][:batch_size]
+    d = dic_out['d'][:batch_size, 0:1]
+
+    # z 계산
+    z = torch.sqrt(torch.clamp(d**2 - x**2 - y**2, min=0))
+
+    # 모든 텐서를 같은 크기로 맞춤
     x = x.reshape(batch_size, 1)
     y = y.reshape(batch_size, 1)
     d = d.reshape(batch_size, 1)
-    
-    # z 계산 및 shape 맞추기
-    z = torch.sqrt(torch.clamp(d**2 - x**2 - y**2, min=0))
     z = z.reshape(batch_size, 1)
-    
-    # 모든 텐서가 (batch_size, 1) 형태인지 확인
-    assert x.size() == y.size() == z.size() == d.size(), "Tensor sizes must match"
-    
+
     dic_out['xyzd'] = torch.cat((x, y, z, d), dim=1)
     dic_out.pop('d')
     dic_out.pop('x')
     dic_out.pop('y')
     dic_out['d'] = d
 
-    yaw_pred = torch.atan2(dic_out['ori'][:, 0:1], dic_out['ori'][:, 1:2])
+    yaw_pred = torch.atan2(dic_out['ori'][:batch_size, 0:1], dic_out['ori'][:batch_size, 1:2])
     yaw_orig = back_correct_angles(yaw_pred, dic_out['xyzd'][:, 0:3])
-    dic_out['yaw'] = (yaw_pred, yaw_orig)  # alpha, ry
+    dic_out['yaw'] = (yaw_pred, yaw_orig)
 
     if outputs.shape[1] == 10:
         dic_out['aux'] = torch.sigmoid(dic_out['aux'])
