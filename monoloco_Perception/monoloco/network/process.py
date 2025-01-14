@@ -255,7 +255,8 @@ def extract_outputs(outputs, tasks=()):
     if not hasattr(extract_outputs, 'ma_filter'):
         extract_outputs.ma_filter = {
             'x': MovingAverage(window_size=5),
-            'y': MovingAverage(window_size=5)
+            'y': MovingAverage(window_size=5),
+            'z': MovingAverage(window_size=7)  # z축은 window size를 더 크게
         }
 
     dic_out = {'x': outputs[:, 0:1],
@@ -279,8 +280,7 @@ def extract_outputs(outputs, tasks=()):
         if key in dic_out:
             value = dic_out[key].detach().cpu().numpy()
             filtered_value = extract_outputs.ma_filter[key].update(value)
-            # 원본 outputs의 배치 크기로 맞춤
-            filtered_value = filtered_value[:outputs.shape[0]]  # 배치 크기 맞추기
+            filtered_value = filtered_value[:outputs.shape[0]]
             dic_out[key] = torch.tensor(filtered_value).reshape(-1, 1)
 
     # 나머지 처리
@@ -293,15 +293,22 @@ def extract_outputs(outputs, tasks=()):
     y = dic_out['y']
     d = dic_out['d'][:, 0:1]
     
-    # 모든 텐서의 배치 크기를 outputs의 크기로 맞춤
     batch_size = outputs.shape[0]
     x = x[:batch_size]
     y = y[:batch_size]
     d = d[:batch_size]
     
-    # z 계산
-    z = torch.sqrt(torch.clamp(d**2 - x**2 - y**2, min=0))
-    z = z.reshape(batch_size, 1)
+    # z 계산 및 필터링
+    z_raw = torch.sqrt(torch.clamp(d**2 - x**2 - y**2, min=0))
+    
+    # z값 필터링 및 범위 제한
+    z_np = z_raw.numpy()
+    z_filtered = extract_outputs.ma_filter['z'].update(z_np)
+    z_filtered = z_filtered[:batch_size]
+    
+    # z값 범위 제한 (급격한 변화 방지)
+    z_min, z_max = 1.0, 20.0  # 실제 환경에 맞게 조정
+    z = torch.tensor(np.clip(z_filtered, z_min, z_max)).reshape(batch_size, 1)
     
     # 모든 텐서의 shape이 일치하는지 확인
     assert x.shape == y.shape == z.shape == d.shape, f"Shape mismatch: x:{x.shape}, y:{y.shape}, z:{z.shape}, d:{d.shape}"
