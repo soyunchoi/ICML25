@@ -274,64 +274,53 @@ def extract_outputs(outputs, tasks=()):
         assert isinstance(tasks, tuple), "tasks need to be a tuple"
         return [dic_out[task] for task in tasks]
 
-    # 중복 감지 제거
-    x = dic_out['x'].detach().cpu()
-    y = dic_out['y'].detach().cpu()
-    
-    # 같은 위치에 있는 감지 결과 제거 (threshold 값으로 판단)
-    unique_indices = []
-    used_positions = set()
-    
-    for i in range(len(x)):
-        pos = (round(float(x[i][0]), 1), round(float(y[i][0]), 1))  # 소수점 첫째자리까지만 비교
-        if pos not in used_positions:
-            used_positions.add(pos)
-            unique_indices.append(i)
-    
-    # 중복이 제거된 인덱스로 모든 텐서 필터링
-    for key in dic_out:
-        if torch.is_tensor(dic_out[key]):
-            dic_out[key] = dic_out[key][unique_indices]
-
     # x, y 좌표 필터링
     for key in ['x', 'y']:
         if key in dic_out:
             value = dic_out[key].detach().cpu().numpy()
             filtered_value = extract_outputs.ma_filter[key].update(value)
-            # 차원 유지를 위해 reshape 사용
+            # 원본 outputs의 배치 크기로 맞춤
+            filtered_value = filtered_value[:outputs.shape[0]]  # 배치 크기 맞추기
             dic_out[key] = torch.tensor(filtered_value).reshape(-1, 1)
 
+    # 나머지 처리
     bi = unnormalize_bi(dic_out['d'])
     dic_out['bi'] = bi
     dic_out = {key: el.detach().cpu() for key, el in dic_out.items()}
-
+    
     # 3D 좌표 계산
-    batch_size = len(unique_indices)  # 중복 제거된 감지 수
-    x = dic_out['x'][:batch_size]
-    y = dic_out['y'][:batch_size]
-    d = dic_out['d'][:batch_size, 0:1]
-
+    x = dic_out['x']
+    y = dic_out['y']
+    d = dic_out['d'][:, 0:1]
+    
+    # 모든 텐서의 배치 크기를 outputs의 크기로 맞춤
+    batch_size = outputs.shape[0]
+    x = x[:batch_size]
+    y = y[:batch_size]
+    d = d[:batch_size]
+    
     # z 계산
     z = torch.sqrt(torch.clamp(d**2 - x**2 - y**2, min=0))
-
-    # 모든 텐서를 같은 크기로 맞춤
-    x = x.reshape(batch_size, 1)
-    y = y.reshape(batch_size, 1)
-    d = d.reshape(batch_size, 1)
     z = z.reshape(batch_size, 1)
-
+    
+    # 모든 텐서의 shape이 일치하는지 확인
+    assert x.shape == y.shape == z.shape == d.shape, f"Shape mismatch: x:{x.shape}, y:{y.shape}, z:{z.shape}, d:{d.shape}"
+    
+    # xyzd 생성
     dic_out['xyzd'] = torch.cat((x, y, z, d), dim=1)
     dic_out.pop('d')
     dic_out.pop('x')
     dic_out.pop('y')
     dic_out['d'] = d
 
+    # 방향 계산
     yaw_pred = torch.atan2(dic_out['ori'][:batch_size, 0:1], dic_out['ori'][:batch_size, 1:2])
     yaw_orig = back_correct_angles(yaw_pred, dic_out['xyzd'][:, 0:3])
     dic_out['yaw'] = (yaw_pred, yaw_orig)
 
     if outputs.shape[1] == 10:
-        dic_out['aux'] = torch.sigmoid(dic_out['aux'])
+        dic_out['aux'] = torch.sigmoid(dic_out['aux'][:batch_size])
+    
     return dic_out
 
 
