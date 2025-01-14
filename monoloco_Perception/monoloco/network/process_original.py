@@ -13,10 +13,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 BF = 0.54 * 721
-z_min = 4       # 카메라가 측정할 수 있는 가장 가까운 거리
-z_max = 60      # 카메라가 측정할 수 있는 가장 먼 거리 
-D_MIN = BF / z_max   # 가장 먼 거리에서의 시차 값
-D_MAX = BF / z_min   # 가장 가까운 거리에서의 시차 값
+z_min = 4
+z_max = 60
+D_MIN = BF / z_max
+D_MAX = BF / z_min
 Sx = 7.2  # nuScenes sensor size (mm)
 Sy = 5.4  # nuScenes sensor size (mm)
 
@@ -227,19 +227,6 @@ def image_transform(image):
     return transforms(image)
 
 
-class MovingAverage:
-    """이동 평균을 계산하는 클래스"""
-    def __init__(self, window_size=5):
-        self.window_size = window_size
-        self.values = []
-        
-    def update(self, value):
-        self.values.append(value)
-        if len(self.values) > self.window_size:
-            self.values.pop(0)
-        return sum(self.values) / len(self.values)
-
-
 def extract_outputs(outputs, tasks=()):
     """
     Extract the outputs for multi-task training and predictions
@@ -249,15 +236,6 @@ def extract_outputs(outputs, tasks=()):
          - if tasks are provided return ordered list of raw tensors
          - else return a dictionary with processed outputs
     """
-        
-    """Extract the outputs for multi-task training and predictions"""
-    # 필터 초기화
-    if not hasattr(extract_outputs, 'ma_filter'):
-        extract_outputs.ma_filter = {
-            'x': MovingAverage(window_size=5),
-            'y': MovingAverage(window_size=5)
-        }
-
     dic_out = {'x': outputs[:, 0:1],
                'y': outputs[:, 1:2],
                'd': outputs[:, 2:4],
@@ -276,33 +254,14 @@ def extract_outputs(outputs, tasks=()):
 
     # Preprocess the tensor
     # AV_H, AV_W, AV_L, HWL_STD = 1.72, 0.75, 0.68, 0.1
-    # x, y 좌표 필터링
-    for key in ['x', 'y']:
-        if key in dic_out:
-            value = dic_out[key].detach().cpu().numpy()
-            filtered_value = extract_outputs.ma_filter[key].update(value)
-            # 차원 유지를 위해 reshape 사용
-            dic_out[key] = torch.tensor(filtered_value).reshape(-1, 1)
-
     bi = unnormalize_bi(dic_out['d'])
     dic_out['bi'] = bi
 
     dic_out = {key: el.detach().cpu() for key, el in dic_out.items()}
-    # x = to_cartesian(outputs[:, 0:3].detach().cpu(), mode='x')
-    # y = to_cartesian(outputs[:, 0:3].detach().cpu(), mode='y')
-    
-    # 3D 좌표 계산
-    x = dic_out['x']
-    y = dic_out['y']
+    x = to_cartesian(outputs[:, 0:3].detach().cpu(), mode='x')
+    y = to_cartesian(outputs[:, 0:3].detach().cpu(), mode='y')
     d = dic_out['d'][:, 0:1]
     z = torch.sqrt(d**2 - x**2 - y**2)
-    
-    # (N,1) 형태로 통일
-    x = x.reshape(-1, 1)
-    y = y.reshape(-1, 1)
-    z = z.reshape(-1, 1)
-    d = d.reshape(-1, 1)
-    
     dic_out['xyzd'] = torch.cat((x, y, z, d), dim=1)
     dic_out.pop('d')
     dic_out.pop('x')
