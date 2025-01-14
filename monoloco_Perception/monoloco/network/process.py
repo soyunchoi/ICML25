@@ -277,51 +277,51 @@ def extract_outputs(outputs, tasks=()):
     # Preprocess the tensor
     # AV_H, AV_W, AV_L, HWL_STD = 1.72, 0.75, 0.68, 0.1
     # x, y 좌표 필터링
-    try:
-        for key in ['x', 'y']:
-            if key in dic_out:
-                value = dic_out[key].detach().cpu().numpy()
-                filtered_value = extract_outputs.ma_filter[key].update(value)
-                # 원본 텐서와 같은 shape 유지
-                dic_out[key] = torch.tensor(filtered_value).reshape(outputs.shape[0], 1)
+    for key in ['x', 'y']:
+        if key in dic_out:
+            value = dic_out[key].detach().cpu().numpy()
+            filtered_value = extract_outputs.ma_filter[key].update(value)
+            # 차원 유지를 위해 reshape 사용
+            dic_out[key] = torch.tensor(filtered_value).reshape(-1, 1)
 
-        # 나머지 처리
-        bi = unnormalize_bi(dic_out['d'])
-        dic_out['bi'] = bi
-        dic_out = {key: el.detach().cpu() for key, el in dic_out.items()}
-        
-        x = dic_out['x']
-        y = dic_out['y']
-        d = dic_out['d'][:, 0:1]
-        
-        # 모든 텐서의 shape을 확인하고 맞춤
-        batch_size = x.shape[0]
-        x = x.reshape(batch_size, 1)
-        y = y.reshape(batch_size, 1)
-        d = d.reshape(batch_size, 1)
-        
-        # z 계산 및 shape 맞춤
-        z = torch.sqrt(d**2 - x**2 - y**2)
-        z = z.reshape(batch_size, 1)
-        
-        # 모든 텐서의 shape이 일치하는지 확인
-        assert x.shape == y.shape == z.shape == d.shape, "Tensor shapes do not match"
-        
-        # 텐서 연결
-        dic_out['xyzd'] = torch.cat((x, y, z, d), dim=1)
-        
-    except Exception as e:
-        logger.warning(f"Error in extract_outputs: {str(e)}")
-        # 에러 발생 시 이전 값 유지 또는 기본값 사용
-        if hasattr(extract_outputs, 'previous_xyzd'):
-            dic_out['xyzd'] = extract_outputs.previous_xyzd
-        else:
-            # 기본값 설정
-            dic_out['xyzd'] = torch.zeros((outputs.shape[0], 4))
+    bi = unnormalize_bi(dic_out['d'])
+    dic_out['bi'] = bi
+    dic_out = {key: el.detach().cpu() for key, el in dic_out.items()}
+    # x = to_cartesian(outputs[:, 0:3].detach().cpu(), mode='x')
+    # y = to_cartesian(outputs[:, 0:3].detach().cpu(), mode='y')
     
-    # 현재 값을 이전 값으로 저장
-    extract_outputs.previous_xyzd = dic_out['xyzd']
+    # 3D 좌표 계산
+    x = dic_out['x']
+    y = dic_out['y']
+    d = dic_out['d'][:, 0:1]
     
+    # 모든 텐서를 동일한 batch size로 맞춤
+    batch_size = x.size(0)
+    
+    # 계산 전에 shape 맞추기
+    x = x.reshape(batch_size, 1)
+    y = y.reshape(batch_size, 1)
+    d = d.reshape(batch_size, 1)
+    
+    # z 계산 및 shape 맞추기
+    z = torch.sqrt(torch.clamp(d**2 - x**2 - y**2, min=0))
+    z = z.reshape(batch_size, 1)
+    
+    # 모든 텐서가 (batch_size, 1) 형태인지 확인
+    assert x.size() == y.size() == z.size() == d.size(), "Tensor sizes must match"
+    
+    dic_out['xyzd'] = torch.cat((x, y, z, d), dim=1)
+    dic_out.pop('d')
+    dic_out.pop('x')
+    dic_out.pop('y')
+    dic_out['d'] = d
+
+    yaw_pred = torch.atan2(dic_out['ori'][:, 0:1], dic_out['ori'][:, 1:2])
+    yaw_orig = back_correct_angles(yaw_pred, dic_out['xyzd'][:, 0:3])
+    dic_out['yaw'] = (yaw_pred, yaw_orig)  # alpha, ry
+
+    if outputs.shape[1] == 10:
+        dic_out['aux'] = torch.sigmoid(dic_out['aux'])
     return dic_out
 
 
