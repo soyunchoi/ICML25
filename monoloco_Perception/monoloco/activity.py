@@ -213,7 +213,7 @@ def is_sitting(kp, threshold_ratio=1.3):
     return abs(hip_height - knee_height) < threshold_ratio
 
 
-def is_standing(kp, threshold_vertical=2.0):
+def is_standing(kp, threshold_vertical=1.7):
     """
     Returns True if person is in standing position
     양쪽 어깨, 엉덩이, 무릎, 발목을 모두 고려
@@ -238,10 +238,10 @@ def is_standing(kp, threshold_vertical=2.0):
     
     # 상체 수평 확인 (더 관대하게)
     if left_upper and right_upper:
-        shoulder_horizontal = abs(kp[y][l_shoulder] - kp[y][r_shoulder]) < threshold_vertical * 0.8
-        hip_horizontal = abs(kp[y][l_hip] - kp[y][r_hip]) < threshold_vertical * 0.8
+        shoulder_horizontal = abs(kp[y][l_shoulder] - kp[y][r_shoulder]) < threshold_vertical * 0.6
+        hip_horizontal = abs(kp[y][l_hip] - kp[y][r_hip]) < threshold_vertical * 0.6
     else:
-        shoulder_horizontal = hip_horizontal = True  # 한쪽만 보이면 수평 조건 무시
+        shoulder_horizontal = hip_horizontal = True
     
     # 하체 키포인트 확인
     left_lower = check_keypoints_visibility(kp, [l_knee, l_ankle])
@@ -249,39 +249,40 @@ def is_standing(kp, threshold_vertical=2.0):
     has_lower_points = left_lower or right_lower
     
     if has_lower_points:
-        # 전체 수직 정렬 확인 (더 관대하게)
-        left_full_vertical = left_lower and abs(kp[x][l_shoulder] - kp[x][l_ankle]) < threshold_vertical * 1.5
-        right_full_vertical = right_lower and abs(kp[x][r_shoulder] - kp[x][r_ankle]) < threshold_vertical * 1.5
+        # 전체 수직 정렬 확인
+        left_full_vertical = left_lower and abs(kp[x][l_shoulder] - kp[x][l_ankle]) < threshold_vertical * 1.3
+        right_full_vertical = right_lower and abs(kp[x][r_shoulder] - kp[x][r_ankle]) < threshold_vertical * 1.3
         full_vertical = left_full_vertical or right_full_vertical
         
-        # 무릎 펴짐 확인 (더 관대하게)
-        left_knee_straight = left_lower and (kp[y][l_knee] > kp[y][l_ankle] * 0.9)
-        right_knee_straight = right_lower and (kp[y][r_knee] > kp[y][r_ankle] * 0.9)
+        # 무릎 펴짐 확인
+        left_knee_straight = left_lower and (kp[y][l_knee] > kp[y][l_ankle] * 0.95)
+        right_knee_straight = right_lower and (kp[y][r_knee] > kp[y][r_ankle] * 0.95)
         knee_straight = left_knee_straight or right_knee_straight
         
-        # 발목 위치 확인 (더 관대하게)
-        left_feet_grounded = left_lower and (kp[y][l_ankle] > 0.6 * max(kp[y]))
-        right_feet_grounded = right_lower and (kp[y][r_ankle] > 0.6 * max(kp[y]))
+        # 발목 위치 확인
+        left_feet_grounded = left_lower and (kp[y][l_ankle] > 0.65 * max(kp[y]))
+        right_feet_grounded = right_lower and (kp[y][r_ankle] > 0.65 * max(kp[y]))
         feet_grounded = left_feet_grounded or right_feet_grounded
         
-        # 무릎 수평 확인 (더 관대하게)
+        # 무릎 수평 확인
         if left_lower and right_lower:
-            knee_horizontal = abs(kp[y][l_knee] - kp[y][r_knee]) < threshold_vertical
+            knee_horizontal = abs(kp[y][l_knee] - kp[y][r_knee]) < threshold_vertical * 0.8
         else:
-            knee_horizontal = True  # 한쪽만 보이면 수평 조건 무시
+            knee_horizontal = True
         
-        # 종합적인 판단 (더 관대하게)
-        basic_standing = upper_vertical  # 상체 수직만 확인
+        # 종합적인 판단
+        basic_standing = upper_vertical and (shoulder_horizontal or hip_horizontal)
         if basic_standing:
-            # 하체 조건 중 하나만 만족해도 됨
-            return full_vertical or knee_straight or feet_grounded
+            # 하체 조건 중 두 가지 이상 만족해야 함
+            lower_conditions = [full_vertical, knee_straight, feet_grounded]
+            return sum([1 for cond in lower_conditions if cond]) >= 2
         else:
-            # 상체가 수직이 아니어도 다른 조건들이 충분히 만족하면 standing
-            return (full_vertical and knee_straight) or (knee_straight and feet_grounded)
+            # 상체가 수직이 아니면 모든 하체 조건 만족해야 함
+            return full_vertical and knee_straight and feet_grounded
             
     else:
-        # 상체만 보이는 경우, 상체 수직만으로 판단
-        return upper_vertical
+        # 상체만 보이는 경우
+        return upper_vertical and (shoulder_horizontal or hip_horizontal)
 
 
 def is_crouching(kp, threshold_ratio=0.5):
