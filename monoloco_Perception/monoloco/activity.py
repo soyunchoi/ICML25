@@ -188,32 +188,64 @@ def is_walking(kp, prev_kp=None, threshold=20, min_direction_change=0.3):
     return True
 
 
-def is_sitting(kp, threshold_ratio=1.3):
+def is_sitting(kp, threshold_ratio=1.0):
     """
-    Returns True if person is sitting based on hip and knee height
+    Returns True if person is sitting based on hip and knee position
     """
-    # # standing이면 sitting이 아님
-    # if is_standing(kp):
-    #     return False
+    x, y = 1, 1
+    l_shoulder, r_shoulder = 5, 6
+    l_hip, r_hip = 11, 12
+    l_knee, r_knee = 13, 14
+    l_ankle, r_ankle = 15, 16
+
+    # 필요한 키포인트들이 모두 보이는지 확인 (최소 한쪽은 완전히 보여야 함)
+    left_points = check_keypoints_visibility(kp, [l_shoulder, l_hip, l_knee, l_ankle])
+    right_points = check_keypoints_visibility(kp, [r_shoulder, r_hip, r_knee, r_ankle])
     
-    y = 1
-    hip = 11  # left hip
-    knee = 13  # left knee
-    ankle = 15  # left ankle
-    
-    # 하반신 키포인트가 모두 보이는지 확인
-    required_points = [hip, knee, ankle]
-    if not check_keypoints_visibility(kp, required_points):
+    if not (left_points or right_points):
         return False
     
-    # hip과 knee의 높이 차이로 판단
-    hip_height = kp[y][hip]
-    knee_height = kp[y][knee]
+    # standing이면 sitting이 아님
+    if is_standing(kp):
+        return False
+
+    sitting_conditions = []
     
-    return abs(hip_height - knee_height) < threshold_ratio
+    if left_points:
+        # 왼쪽 hip과 knee의 높이 차이가 작아야 함
+        left_hip_knee_ratio = abs(kp[y][l_hip] - kp[y][l_knee]) < threshold_ratio
+        # hip이 knee보다 뒤에 있어야 함
+        left_hip_behind = kp[x][l_hip] > kp[x][l_knee]
+        # knee가 ankle보다 앞에 있어야 함
+        left_knee_front = kp[x][l_knee] < kp[x][l_ankle]
+        
+        sitting_conditions.append(left_hip_knee_ratio and left_hip_behind and left_knee_front)
+    
+    if right_points:
+        # 오른쪽도 동일한 조건 검사
+        right_hip_knee_ratio = abs(kp[y][r_hip] - kp[y][r_knee]) < threshold_ratio
+        right_hip_behind = kp[x][r_hip] > kp[x][r_knee]
+        right_knee_front = kp[x][r_knee] < kp[x][r_ankle]
+        
+        sitting_conditions.append(right_hip_knee_ratio and right_hip_behind and right_knee_front)
+    
+    # 추가 조건: 어깨가 엉덩이보다 높아야 함
+    if left_points:
+        shoulder_above_hip_left = kp[y][l_shoulder] < kp[y][l_hip]
+        sitting_conditions.append(shoulder_above_hip_left)
+    if right_points:
+        shoulder_above_hip_right = kp[y][r_shoulder] < kp[y][r_hip]
+        sitting_conditions.append(shoulder_above_hip_right)
+
+    # 모든 조건이 만족되어야 함
+    return all(sitting_conditions)
 
 
-def is_standing(kp, threshold_vertical=1.5):
+def is_standing(kp, threshold_vertical=2.0):
+    """
+    Returns True if person is in standing position
+    양쪽 어깨, 엉덩이, 무릎, 발목을 모두 고려
+    """
     x, y = 0, 1
     # 왼쪽/오른쪽 키포인트
     l_shoulder, r_shoulder = 5, 6
@@ -221,57 +253,63 @@ def is_standing(kp, threshold_vertical=1.5):
     l_knee, r_knee = 13, 14
     l_ankle, r_ankle = 15, 16
 
-    # 기본적으로 필요한 상체 키포인트 확인 (양쪽)
-    upper_points = [l_shoulder, r_shoulder, l_hip, r_hip]
-    if not check_keypoints_visibility(kp, upper_points):
+    # 기본적으로 필요한 상체 키포인트 확인 (양쪽 중 하나라도 있으면 됨)
+    left_upper = check_keypoints_visibility(kp, [l_shoulder, l_hip])
+    right_upper = check_keypoints_visibility(kp, [r_shoulder, r_hip])
+    if not (left_upper or right_upper):
         return False
     
-    # 양쪽 상체가 수직인지 확인
-    left_upper_vertical = abs(kp[x][l_shoulder] - kp[x][l_hip]) < threshold_vertical
-    right_upper_vertical = abs(kp[x][r_shoulder] - kp[x][r_hip]) < threshold_vertical
-    upper_vertical = left_upper_vertical and right_upper_vertical
+    # 양쪽 상체 수직 확인 (한쪽만 만족해도 됨)
+    left_upper_vertical = left_upper and abs(kp[x][l_shoulder] - kp[x][l_hip]) < threshold_vertical
+    right_upper_vertical = right_upper and abs(kp[x][r_shoulder] - kp[x][r_hip]) < threshold_vertical
+    upper_vertical = left_upper_vertical or right_upper_vertical
     
-    # 상체가 기울어지지 않았는지 확인 (어깨 수평)
-    shoulder_horizontal = abs(kp[y][l_shoulder] - kp[y][r_shoulder]) < threshold_vertical * 0.5
-    # 엉덩이도 수평 확인
-    hip_horizontal = abs(kp[y][l_hip] - kp[y][r_hip]) < threshold_vertical * 0.5
+    # 상체 수평 확인 (더 관대하게)
+    if left_upper and right_upper:
+        shoulder_horizontal = abs(kp[y][l_shoulder] - kp[y][r_shoulder]) < threshold_vertical * 0.8
+        hip_horizontal = abs(kp[y][l_hip] - kp[y][r_hip]) < threshold_vertical * 0.8
+    else:
+        shoulder_horizontal = hip_horizontal = True  # 한쪽만 보이면 수평 조건 무시
     
-    # 하체 키포인트가 보이는 경우 추가 검사
-    lower_points = [l_knee, r_knee, l_ankle, r_ankle]
-    has_lower_points = check_keypoints_visibility(kp, lower_points)
+    # 하체 키포인트 확인
+    left_lower = check_keypoints_visibility(kp, [l_knee, l_ankle])
+    right_lower = check_keypoints_visibility(kp, [r_knee, r_ankle])
+    has_lower_points = left_lower or right_lower
     
     if has_lower_points:
-        # 양쪽 전체 수직 정렬 확인
-        left_full_vertical = abs(kp[x][l_shoulder] - kp[x][l_ankle]) < threshold_vertical * 1.2
-        right_full_vertical = abs(kp[x][r_shoulder] - kp[x][r_ankle]) < threshold_vertical * 1.2
-        full_vertical = left_full_vertical or right_full_vertical  # 한쪽이라도 수직이면 인정
+        # 전체 수직 정렬 확인 (더 관대하게)
+        left_full_vertical = left_lower and abs(kp[x][l_shoulder] - kp[x][l_ankle]) < threshold_vertical * 1.5
+        right_full_vertical = right_lower and abs(kp[x][r_shoulder] - kp[x][r_ankle]) < threshold_vertical * 1.5
+        full_vertical = left_full_vertical or right_full_vertical
         
-        # 양쪽 무릎 펴짐 확인
-        left_knee_straight = kp[y][l_knee] > kp[y][l_ankle]
-        right_knee_straight = kp[y][r_knee] > kp[y][r_ankle]
-        knee_straight = left_knee_straight or right_knee_straight  # 한쪽이라도 펴져있으면 인정
+        # 무릎 펴짐 확인 (더 관대하게)
+        left_knee_straight = left_lower and (kp[y][l_knee] > kp[y][l_ankle] * 0.9)
+        right_knee_straight = right_lower and (kp[y][r_knee] > kp[y][r_ankle] * 0.9)
+        knee_straight = left_knee_straight or right_knee_straight
         
-        # 양쪽 발목 위치 확인
-        left_feet_grounded = kp[y][l_ankle] > 0.7 * max(kp[y])
-        right_feet_grounded = kp[y][r_ankle] > 0.7 * max(kp[y])
-        feet_grounded = left_feet_grounded or right_feet_grounded  # 한쪽이라도 지면에 있으면 인정
+        # 발목 위치 확인 (더 관대하게)
+        left_feet_grounded = left_lower and (kp[y][l_ankle] > 0.6 * max(kp[y]))
+        right_feet_grounded = right_lower and (kp[y][r_ankle] > 0.6 * max(kp[y]))
+        feet_grounded = left_feet_grounded or right_feet_grounded
         
-        # 무릎이 어느 정도 수평인지 확인
-        knee_horizontal = abs(kp[y][l_knee] - kp[y][r_knee]) < threshold_vertical * 0.7
-        
-        # 종합적인 판단
-        basic_standing = upper_vertical and shoulder_horizontal and hip_horizontal
-        if basic_standing:
-            # 상체가 바르면 하체는 좀 더 관대하게 판단
-            lower_condition = (full_vertical or knee_straight or feet_grounded) and knee_horizontal
-            return True
+        # 무릎 수평 확인 (더 관대하게)
+        if left_lower and right_lower:
+            knee_horizontal = abs(kp[y][l_knee] - kp[y][r_knee]) < threshold_vertical
         else:
-            # 상체가 완벽하지 않으면 더 엄격하게 판단
-            return full_vertical and knee_straight and feet_grounded and knee_horizontal
+            knee_horizontal = True  # 한쪽만 보이면 수평 조건 무시
+        
+        # 종합적인 판단 (더 관대하게)
+        basic_standing = upper_vertical  # 상체 수직만 확인
+        if basic_standing:
+            # 하체 조건 중 하나만 만족해도 됨
+            return full_vertical or knee_straight or feet_grounded
+        else:
+            # 상체가 수직이 아니어도 다른 조건들이 충분히 만족하면 standing
+            return (full_vertical and knee_straight) or (knee_straight and feet_grounded)
             
     else:
-        # 상체만 보이는 경우, 상체의 수직 상태와 수평 상태로 판단
-        return upper_vertical and shoulder_horizontal and hip_horizontal
+        # 상체만 보이는 경우, 상체 수직만으로 판단
+        return upper_vertical
 
 
 def is_crouching(kp, threshold_ratio=0.5):
