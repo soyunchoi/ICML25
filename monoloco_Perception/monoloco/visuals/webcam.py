@@ -86,7 +86,14 @@ def webcam(args):
                n_dropout=args.n_dropout, p_dropout=args.dropout)
 
     # for openpifpaf predicitons
-    predictor = openpifpaf.Predictor(checkpoint=args.checkpoint)
+    predictor = openpifpaf.Predictor(
+        checkpoint=args.checkpoint,
+        visualize_image=False,
+        visualize_processed_image=False
+    )
+    
+    # decoder 설정 수정
+    predictor.model.confidence = 0.5  # confidence threshold 직접 설정
 
     # Start recording
     cam = cv2.VideoCapture(args.camera)
@@ -159,11 +166,11 @@ def webcam(args):
         if 'basic_activities' in dic_out:
             current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
             for human_id, activities in dic_out['basic_activities'].items():
-                if activities:  # 활동이 감지된 경우만 기록
-                    log_entry = f"{current_time}, Human {human_id}, {activities}\n"
-                    log_file.write(log_entry)
-                    log_file.flush()  # 즉시 파일에 쓰기
-                    LOG.debug(f"Activity logged: {log_entry.strip()}")
+                # 활동 감지 여부와 관계없이 모든 사람 기록
+                log_entry = f"{current_time}, Human {human_id}, {activities}\n"
+                log_file.write(log_entry)
+                log_file.flush()  # 즉시 파일에 쓰기
+                LOG.debug(f"Activity logged: {log_entry.strip()}")
 
         if visualizer_mono is None:  # it is, at the beginning
             visualizer_mono = Visualizer(kk, args)(pil_image)  # create it with the first image
