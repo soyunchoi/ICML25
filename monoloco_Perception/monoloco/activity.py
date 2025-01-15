@@ -213,63 +213,65 @@ def is_sitting(kp, threshold_ratio=1.3):
     return abs(hip_height - knee_height) < threshold_ratio
 
 
-def is_standing(kp, threshold_vertical=1.2):
-    """
-    Returns True if person is in standing position
-    """
+def is_standing(kp, threshold_vertical=1.5):
     x, y = 0, 1
-    shoulder = 5  # left shoulder
-    hip = 11      # left hip
-    ankle = 15    # left ankle
-    knee = 13     # left knee
+    # 왼쪽/오른쪽 키포인트
+    l_shoulder, r_shoulder = 5, 6
+    l_hip, r_hip = 11, 12
+    l_knee, r_knee = 13, 14
+    l_ankle, r_ankle = 15, 16
 
-    # 기본적으로 필요한 상체 키포인트 확인
-    upper_points = [shoulder, hip]
+    # 기본적으로 필요한 상체 키포인트 확인 (양쪽)
+    upper_points = [l_shoulder, r_shoulder, l_hip, r_hip]
     if not check_keypoints_visibility(kp, upper_points):
         return False
     
-    # 상체가 수직인지 확인
-    upper_vertical = abs(kp[x][shoulder] - kp[x][hip]) < threshold_vertical
+    # 양쪽 상체가 수직인지 확인
+    left_upper_vertical = abs(kp[x][l_shoulder] - kp[x][l_hip]) < threshold_vertical
+    right_upper_vertical = abs(kp[x][r_shoulder] - kp[x][r_hip]) < threshold_vertical
+    upper_vertical = left_upper_vertical and right_upper_vertical
+    
+    # 상체가 기울어지지 않았는지 확인 (어깨 수평)
+    shoulder_horizontal = abs(kp[y][l_shoulder] - kp[y][r_shoulder]) < threshold_vertical * 0.5
+    # 엉덩이도 수평 확인
+    hip_horizontal = abs(kp[y][l_hip] - kp[y][r_hip]) < threshold_vertical * 0.5
     
     # 하체 키포인트가 보이는 경우 추가 검사
-    lower_points = [knee, ankle]
+    lower_points = [l_knee, r_knee, l_ankle, r_ankle]
     has_lower_points = check_keypoints_visibility(kp, lower_points)
     
     if has_lower_points:
-        # 전체 수직 정렬 확인
-        full_vertical = abs(kp[x][shoulder] - kp[x][ankle]) < threshold_vertical
-        # 무릎 펴짐 확인
-        knee_straight = kp[y][knee] > kp[y][ankle] and abs(kp[y][hip] - kp[y][knee]) > abs(kp[y][knee] - kp[y][ankle])
-        # 발목 위치 확인
-        feet_grounded = kp[y][ankle] > 0.8 * max(kp[y])
+        # 양쪽 전체 수직 정렬 확인
+        left_full_vertical = abs(kp[x][l_shoulder] - kp[x][l_ankle]) < threshold_vertical * 1.2
+        right_full_vertical = abs(kp[x][r_shoulder] - kp[x][r_ankle]) < threshold_vertical * 1.2
+        full_vertical = left_full_vertical or right_full_vertical  # 한쪽이라도 수직이면 인정
         
-        return upper_vertical and full_vertical and knee_straight and feet_grounded
+        # 양쪽 무릎 펴짐 확인
+        left_knee_straight = kp[y][l_knee] > kp[y][l_ankle]
+        right_knee_straight = kp[y][r_knee] > kp[y][r_ankle]
+        knee_straight = left_knee_straight or right_knee_straight  # 한쪽이라도 펴져있으면 인정
+        
+        # 양쪽 발목 위치 확인
+        left_feet_grounded = kp[y][l_ankle] > 0.7 * max(kp[y])
+        right_feet_grounded = kp[y][r_ankle] > 0.7 * max(kp[y])
+        feet_grounded = left_feet_grounded or right_feet_grounded  # 한쪽이라도 지면에 있으면 인정
+        
+        # 무릎이 어느 정도 수평인지 확인
+        knee_horizontal = abs(kp[y][l_knee] - kp[y][r_knee]) < threshold_vertical * 0.7
+        
+        # 종합적인 판단
+        basic_standing = upper_vertical and shoulder_horizontal and hip_horizontal
+        if basic_standing:
+            # 상체가 바르면 하체는 좀 더 관대하게 판단
+            lower_condition = (full_vertical or knee_straight or feet_grounded) and knee_horizontal
+            return True
+        else:
+            # 상체가 완벽하지 않으면 더 엄격하게 판단
+            return full_vertical and knee_straight and feet_grounded and knee_horizontal
+            
     else:
-        # 상체만 보이는 경우, 상체의 수직 상태와 hip의 높이로 판단
-        hip_height_ratio = kp[y][hip] / max(kp[y])  # hip의 상대적 높이
-        return upper_vertical and hip_height_ratio > 0.6  # hip이 충분히 아래에 있으면 standing으로 판단
-
-
-def is_jumping(kp, prev_kp=None, threshold=20):
-    """
-    Returns True if person is jumping
-    """
-    if prev_kp is None:
-        return False
-    
-    # # standing이나 walking이면 jumping이 아님
-    # if is_standing(kp) or is_walking(kp, prev_kp):
-    #     return False
-        
-    y = 1
-    ankle = 15    # left ankle
-    knee = 13     # left knee
-    
-    # 발목과 무릎 높이의 급격한 변화 감지
-    height_change = abs(kp[y][ankle] - prev_kp[y][ankle])
-    knee_change = abs(kp[y][knee] - prev_kp[y][knee])
-    
-    return height_change > threshold and knee_change > threshold
+        # 상체만 보이는 경우, 상체의 수직 상태와 수평 상태로 판단
+        return upper_vertical and shoulder_horizontal and hip_horizontal
 
 
 def is_crouching(kp, threshold_ratio=0.5):
