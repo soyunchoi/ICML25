@@ -142,13 +142,13 @@ def is_walking(kp, prev_kp=None, threshold=20, min_direction_change=0.3):
     l_knee, r_knee = 13, 14
     l_ankle, r_ankle = 15, 16
     
-    # sitting이면 walking이 아님
-    if is_sitting(kp):
-        return False
+    # # sitting이면 walking이 아님
+    # if is_sitting(kp):
+    #     return False
     
-    # standing이면 walking이 아님
-    if is_standing(kp):
-        return False
+    # # standing이면 walking이 아님
+    # if is_standing(kp):
+    #     return False
     
     # 하반신 키포인트가 모두 보이는지 확인
     required_points = [l_knee, r_knee, l_ankle, r_ankle]
@@ -192,9 +192,9 @@ def is_sitting(kp, threshold_ratio=1.3):
     """
     Returns True if person is sitting based on hip and knee height
     """
-    # standing이면 sitting이 아님
-    if is_standing(kp):
-        return False
+    # # standing이면 sitting이 아님
+    # if is_standing(kp):
+    #     return False
     
     y = 1
     hip = 11  # left hip
@@ -257,9 +257,9 @@ def is_jumping(kp, prev_kp=None, threshold=20):
     if prev_kp is None:
         return False
     
-    # standing이나 walking이면 jumping이 아님
-    if is_standing(kp) or is_walking(kp, prev_kp):
-        return False
+    # # standing이나 walking이면 jumping이 아님
+    # if is_standing(kp) or is_walking(kp, prev_kp):
+    #     return False
         
     y = 1
     ankle = 15    # left ankle
