@@ -8,6 +8,8 @@ Implementation adapted from https://github.com/vita-epfl/openpifpaf/blob/master/
 
 import time
 import logging
+import os
+from datetime import datetime
 
 import torch
 import matplotlib.pyplot as plt
@@ -90,8 +92,18 @@ def webcam(args):
     cam = cv2.VideoCapture(args.camera)
     visualizer_mono = None
 
+    # 현재 디렉토리에 logs 폴더 생성
+    current_dir = os.getcwd()
+    logs_dir = os.path.join(current_dir, 'logs')
+    if not os.path.exists(logs_dir):
+        os.makedirs(logs_dir)
+
+    # 현재 시간을 파일명에 포함
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    log_filename = os.path.join(logs_dir, f'activity_log_{timestamp}.txt')
+
     # 로그 파일 초기화
-    log_file = open('activity_log.txt', 'w')
+    log_file = open(log_filename, 'w')
     log_file.write("Time, Human ID, Activities\n")  # 헤더 작성
     
     while True:
