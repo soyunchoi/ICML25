@@ -188,57 +188,29 @@ def is_walking(kp, prev_kp=None, threshold=20, min_direction_change=0.3):
     return True
 
 
-def is_sitting(kp, threshold_ratio=1.0):
+def is_sitting(kp, threshold_ratio=1.3):
     """
-    Returns True if person is sitting based on hip and knee position
+    Returns True if person is sitting based on hip and knee height
     """
-    x, y = 1, 1
-    l_shoulder, r_shoulder = 5, 6
-    l_hip, r_hip = 11, 12
-    l_knee, r_knee = 13, 14
-    l_ankle, r_ankle = 15, 16
-
-    # 필요한 키포인트들이 모두 보이는지 확인 (최소 한쪽은 완전히 보여야 함)
-    left_points = check_keypoints_visibility(kp, [l_shoulder, l_hip, l_knee, l_ankle])
-    right_points = check_keypoints_visibility(kp, [r_shoulder, r_hip, r_knee, r_ankle])
+    # # standing이면 sitting이 아님
+    # if is_standing(kp):
+    #     return False
     
-    if not (left_points or right_points):
+    y = 1
+    hip = 11  # left hip
+    knee = 13  # left knee
+    ankle = 15  # left ankle
+    
+    # 하반신 키포인트가 모두 보이는지 확인
+    required_points = [hip, knee, ankle]
+    if not check_keypoints_visibility(kp, required_points):
         return False
     
-    # standing이면 sitting이 아님
-    if is_standing(kp):
-        return False
-
-    sitting_conditions = []
+    # hip과 knee의 높이 차이로 판단
+    hip_height = kp[y][hip]
+    knee_height = kp[y][knee]
     
-    if left_points:
-        # 왼쪽 hip과 knee의 높이 차이가 작아야 함
-        left_hip_knee_ratio = abs(kp[y][l_hip] - kp[y][l_knee]) < threshold_ratio
-        # hip이 knee보다 뒤에 있어야 함
-        left_hip_behind = kp[x][l_hip] > kp[x][l_knee]
-        # knee가 ankle보다 앞에 있어야 함
-        left_knee_front = kp[x][l_knee] < kp[x][l_ankle]
-        
-        sitting_conditions.append(left_hip_knee_ratio and left_hip_behind and left_knee_front)
-    
-    if right_points:
-        # 오른쪽도 동일한 조건 검사
-        right_hip_knee_ratio = abs(kp[y][r_hip] - kp[y][r_knee]) < threshold_ratio
-        right_hip_behind = kp[x][r_hip] > kp[x][r_knee]
-        right_knee_front = kp[x][r_knee] < kp[x][r_ankle]
-        
-        sitting_conditions.append(right_hip_knee_ratio and right_hip_behind and right_knee_front)
-    
-    # 추가 조건: 어깨가 엉덩이보다 높아야 함
-    if left_points:
-        shoulder_above_hip_left = kp[y][l_shoulder] < kp[y][l_hip]
-        sitting_conditions.append(shoulder_above_hip_left)
-    if right_points:
-        shoulder_above_hip_right = kp[y][r_shoulder] < kp[y][r_hip]
-        sitting_conditions.append(shoulder_above_hip_right)
-
-    # 모든 조건이 만족되어야 함
-    return all(sitting_conditions)
+    return abs(hip_height - knee_height) < threshold_ratio
 
 
 def is_standing(kp, threshold_vertical=2.0):
