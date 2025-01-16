@@ -278,13 +278,13 @@ class Loco:
         """
         Detect basic activities for each person
         """
-        # 이전 프레임 키포인트 저장을 위한 static 변수
+        # Static variable to store previous frame keypoints
         if not hasattr(Loco.basic_activities, 'prev_keypoints'):
             Loco.basic_activities.prev_keypoints = {}
 
         activities = {}
         
-        # social interaction을 위한 데이터 준비
+        # Prepare data for social interaction
         angles = dic_out.get('angles', [])
         dds = dic_out.get('dds_pred', [])
         stds = dic_out.get('stds_ale', [])
@@ -293,10 +293,10 @@ class Loco:
         for idx, keypoint in enumerate(keypoints):
             activities[idx] = {}
             
-            # 이전 프레임 키포인트 가져오기
+            # Get previous frame keypoints
             prev_kp = Loco.basic_activities.prev_keypoints.get(idx)
 
-            # 각 활동 감지
+            # Detect each activity
             if is_walking(keypoint, prev_kp):
                 activities[idx]['walking'] = True
                 
@@ -313,20 +313,20 @@ class Loco:
             if raise_status:
                 activities[idx]['raising_hand'] = raise_status
 
-            # social interaction 감지
-            if xz_centers and angles and dds and stds:  # 필요한 데이터가 모두 있는 경우
+            # Detect social interaction
+            if xz_centers and angles and dds and stds:  # Check if all required data is available
                 is_close = social_interactions(
                     idx, 
                     xz_centers, 
                     angles, 
                     dds,
                     stds=stds,
-                    threshold_dist=2.0  # 기본값 설정
+                    threshold_dist=2.0  # Default value
                 )
                 if is_close:
                     activities[idx]['social_distance'] = True
 
-            # 현재 프레임의 키포인트 저장
+            # Store current frame keypoints
             Loco.basic_activities.prev_keypoints[idx] = keypoint
 
         dic_out['basic_activities'] = activities
