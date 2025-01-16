@@ -13,12 +13,12 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 BF = 0.54 * 721
-z_min = 4       # 카메라가 측정할 수 있는 가장 가까운 거리
-z_max = 60      # 카메라가 측정할 수 있는 가장 먼 거리 
-D_MIN = BF / z_max   # 가장 먼 거리에서의 시차 값
-D_MAX = BF / z_min   # 가장 가까운 거리에서의 시차 값
-Sx = 7.2  # nuScenes sensor size (mm)
-Sy = 5.4  # nuScenes sensor size (mm)
+z_min = 4
+z_max = 60
+D_MIN = BF / z_max
+D_MAX = BF / z_min
+Sx = 7.2
+Sy = 5.4
 
 
 def preprocess_monstereo(keypoints, keypoints_r, kk):
