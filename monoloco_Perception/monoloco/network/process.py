@@ -228,7 +228,7 @@ def image_transform(image):
 
 
 class MovingAverage:
-    """이동 평균을 계산하는 클래스"""
+    """Calculate moving average"""
     def __init__(self, window_size=5):
         self.window_size = window_size
         self.values = []
@@ -251,12 +251,12 @@ def extract_outputs(outputs, tasks=()):
     """
         
     """Extract the outputs for multi-task training and predictions"""
-    # 필터 초기화
+    # Initialize filters
     if not hasattr(extract_outputs, 'ma_filter'):
         extract_outputs.ma_filter = {
             'x': MovingAverage(window_size=5),
             'y': MovingAverage(window_size=5),
-            'z': MovingAverage(window_size=7)  # z축은 window size를 더 크게
+            'z': MovingAverage(window_size=7)  # z-axis has a larger window size
         }
 
     dic_out = {'x': outputs[:, 0:1],
@@ -275,7 +275,7 @@ def extract_outputs(outputs, tasks=()):
         assert isinstance(tasks, tuple), "tasks need to be a tuple"
         return [dic_out[task] for task in tasks]
 
-    # x, y 좌표 필터링
+    # Filter x, y coordinates
     for key in ['x', 'y']:
         if key in dic_out:
             value = dic_out[key].detach().cpu().numpy()
@@ -283,12 +283,12 @@ def extract_outputs(outputs, tasks=()):
             filtered_value = filtered_value[:outputs.shape[0]]
             dic_out[key] = torch.tensor(filtered_value).reshape(-1, 1)
 
-    # 나머지 처리
+    # Remaining processing
     bi = unnormalize_bi(dic_out['d'])
     dic_out['bi'] = bi
     dic_out = {key: el.detach().cpu() for key, el in dic_out.items()}
     
-    # 3D 좌표 계산
+    # Calculate 3D coordinates
     x = dic_out['x']
     y = dic_out['y']
     d = dic_out['d'][:, 0:1]
@@ -298,29 +298,29 @@ def extract_outputs(outputs, tasks=()):
     y = y[:batch_size]
     d = d[:batch_size]
     
-    # z 계산 및 필터링
+    # Calculate z and filter
     z_raw = torch.sqrt(torch.clamp(d**2 - x**2 - y**2, min=0))
     
-    # z값 필터링 및 범위 제한
+    # Filter z values and limit range
     z_np = z_raw.numpy()
     z_filtered = extract_outputs.ma_filter['z'].update(z_np)
     z_filtered = z_filtered[:batch_size]
     
-    # z값 범위 제한 (급격한 변화 방지)
-    z_min, z_max = 1.0, 20.0  # 실제 환경에 맞게 조정
+    # Limit z range (prevent abrupt changes)
+    z_min, z_max = 1.0, 20.0  # Adjust based on actual environment
     z = torch.tensor(np.clip(z_filtered, z_min, z_max)).reshape(batch_size, 1)
     
-    # 모든 텐서의 shape이 일치하는지 확인
+    # Check if all tensors have the same shape
     assert x.shape == y.shape == z.shape == d.shape, f"Shape mismatch: x:{x.shape}, y:{y.shape}, z:{z.shape}, d:{d.shape}"
     
-    # xyzd 생성
+    # Create xyzd
     dic_out['xyzd'] = torch.cat((x, y, z, d), dim=1)
     dic_out.pop('d')
     dic_out.pop('x')
     dic_out.pop('y')
     dic_out['d'] = d
 
-    # 방향 계산
+    # Calculate direction
     yaw_pred = torch.atan2(dic_out['ori'][:batch_size, 0:1], dic_out['ori'][:batch_size, 1:2])
     yaw_orig = back_correct_angles(yaw_pred, dic_out['xyzd'][:, 0:3])
     dic_out['yaw'] = (yaw_pred, yaw_orig)
