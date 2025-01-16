@@ -119,11 +119,12 @@ def is_raising_hand(kp):
 
 def check_keypoints_visibility(kp, required_points):
     """
-    주어진 키포인트들이 모두 유효한지 확인
-    returns: bool
+    Check if all required keypoints are visible and valid
     """
-    threshold = 0.1  # 키포인트가 유효하다고 판단할 최소값
+    threshold = 0.1     # Minimum value for keypoint coordinates to be considered valid
     for point in required_points:
+        # Check if both x and y coordinates are below threshold
+        # which would indicate an invalid or undetected keypoint
         if abs(kp[0][point]) < threshold and abs(kp[1][point]) < threshold:
             return False
     return True
@@ -131,9 +132,7 @@ def check_keypoints_visibility(kp, required_points):
 
 def is_walking(kp, prev_kp=None, threshold=20, min_direction_change=0.3):
     """
-    Returns True if person is walking based on leg movement and direction
-    threshold: 최소 움직임 크기
-    min_direction_change: 최소 방향 변화량 (0~1 사이 값)
+    Determines if a person is walking based on leg movement and direction changes
     """
     if prev_kp is None:
         return False
@@ -142,20 +141,12 @@ def is_walking(kp, prev_kp=None, threshold=20, min_direction_change=0.3):
     l_knee, r_knee = 13, 14
     l_ankle, r_ankle = 15, 16
     
-    # # sitting이면 walking이 아님
-    # if is_sitting(kp):
-    #     return False
-    
-    # # standing이면 walking이 아님
-    # if is_standing(kp):
-    #     return False
-    
-    # 하반신 키포인트가 모두 보이는지 확인
+    # Check if all lower body keypoints are visible
     required_points = [l_knee, r_knee, l_ankle, r_ankle]
     if not check_keypoints_visibility(kp, required_points):
         return False
     
-    # 움직임 방향과 크기 계산
+    # Calculate movement direction and size
     movements = []
     directions = []
     
@@ -164,27 +155,26 @@ def is_walking(kp, prev_kp=None, threshold=20, min_direction_change=0.3):
         dy = kp[y][point] - prev_kp[y][point]
         movement = math.sqrt(dx*dx + dy*dy)
         
-        # 움직임이 있는 경우만 방향 계산
+        # Calculate direction only if there is movement
         if movement > 0:
-            direction = math.atan2(dy, dx)  # -pi에서 pi 사이의 각도
+            direction = math.atan2(dy, dx)  # Angle between -pi and pi
             movements.append(movement)
             directions.append(direction)
     
-    if not movements:  # 움직임이 없으면 walking이 아님
+    if not movements:  # No movement means not walking
         return False
     
-    # 움직임의 크기가 충분한지 확인
+    # Check if movement size is sufficient
     avg_movement = sum(movements) / len(movements)
     if avg_movement < threshold:
         return False
     
-    # 방향 변화가 충분한지 확인 (왼쪽/오른쪽 다리의 반대 방향 움직임)
+    # Check if direction change is sufficient (opposite direction movement for left/right leg)
     if len(directions) >= 2:
         max_direction_diff = max([abs(d1 - d2) for d1 in directions for d2 in directions])
         if max_direction_diff < min_direction_change * math.pi:
             return False
     
-    # 모든 조건을 만족하면 walking으로 판단
     return True
 
 
@@ -192,21 +182,18 @@ def is_sitting(kp, threshold_ratio=1.3):
     """
     Returns True if person is sitting based on hip and knee height
     """
-    # # standing이면 sitting이 아님
-    # if is_standing(kp):
-    #     return False
     
     y = 1
     hip = 11  # left hip
     knee = 13  # left knee
     ankle = 15  # left ankle
     
-    # 하반신 키포인트가 모두 보이는지 확인
+    # Check if all lower body keypoints are visible
     required_points = [hip, knee, ankle]
     if not check_keypoints_visibility(kp, required_points):
         return False
     
-    # hip과 knee의 높이 차이로 판단
+    # Determine if person is sitting based on hip and knee height difference
     hip_height = kp[y][hip]
     knee_height = kp[y][knee]
     
@@ -216,72 +203,72 @@ def is_sitting(kp, threshold_ratio=1.3):
 def is_standing(kp, threshold_vertical=1.7):
     """
     Returns True if person is in standing position
-    양쪽 어깨, 엉덩이, 무릎, 발목을 모두 고려
+    Consider both shoulders, hips, knees, and ankles
     """
     x, y = 0, 1
-    # 왼쪽/오른쪽 키포인트
+    # Left/right keypoints
     l_shoulder, r_shoulder = 5, 6
     l_hip, r_hip = 11, 12
     l_knee, r_knee = 13, 14
     l_ankle, r_ankle = 15, 16
 
-    # 기본적으로 필요한 상체 키포인트 확인 (양쪽 중 하나라도 있으면 됨)
+    # Check if at least one of the upper body keypoints is visible
     left_upper = check_keypoints_visibility(kp, [l_shoulder, l_hip])
     right_upper = check_keypoints_visibility(kp, [r_shoulder, r_hip])
     if not (left_upper or right_upper):
         return False
     
-    # 양쪽 상체 수직 확인 (한쪽만 만족해도 됨)
+    # Check if both shoulders are vertical (at least one is enough)
     left_upper_vertical = left_upper and abs(kp[x][l_shoulder] - kp[x][l_hip]) < threshold_vertical
     right_upper_vertical = right_upper and abs(kp[x][r_shoulder] - kp[x][r_hip]) < threshold_vertical
     upper_vertical = left_upper_vertical or right_upper_vertical
     
-    # 상체 수평 확인 (더 관대하게)
+    # Check if shoulders are horizontal
     if left_upper and right_upper:
         shoulder_horizontal = abs(kp[y][l_shoulder] - kp[y][r_shoulder]) < threshold_vertical * 0.6
         hip_horizontal = abs(kp[y][l_hip] - kp[y][r_hip]) < threshold_vertical * 0.6
     else:
         shoulder_horizontal = hip_horizontal = True
     
-    # 하체 키포인트 확인
+    # Check if lower body keypoints are visible
     left_lower = check_keypoints_visibility(kp, [l_knee, l_ankle])
     right_lower = check_keypoints_visibility(kp, [r_knee, r_ankle])
     has_lower_points = left_lower or right_lower
     
     if has_lower_points:
-        # 전체 수직 정렬 확인
+        # Check if overall vertical alignment
         left_full_vertical = left_lower and abs(kp[x][l_shoulder] - kp[x][l_ankle]) < threshold_vertical * 1.3
         right_full_vertical = right_lower and abs(kp[x][r_shoulder] - kp[x][r_ankle]) < threshold_vertical * 1.3
         full_vertical = left_full_vertical or right_full_vertical
         
-        # 무릎 펴짐 확인
+        # Check if knees are straight
         left_knee_straight = left_lower and (kp[y][l_knee] > kp[y][l_ankle] * 0.95)
         right_knee_straight = right_lower and (kp[y][r_knee] > kp[y][r_ankle] * 0.95)
         knee_straight = left_knee_straight or right_knee_straight
         
-        # 발목 위치 확인
+        # Check if feet are grounded
         left_feet_grounded = left_lower and (kp[y][l_ankle] > 0.65 * max(kp[y]))
         right_feet_grounded = right_lower and (kp[y][r_ankle] > 0.65 * max(kp[y]))
         feet_grounded = left_feet_grounded or right_feet_grounded
         
-        # 무릎 수평 확인
+        # Check if knees are horizontal
         if left_lower and right_lower:
             knee_horizontal = abs(kp[y][l_knee] - kp[y][r_knee]) < threshold_vertical * 0.8
         else:
             knee_horizontal = True
         
-        # 종합적인 판단
+        # Overall judgment
         basic_standing = upper_vertical and (shoulder_horizontal or hip_horizontal)
         if basic_standing:
-            # 하체 조건 중 두 가지 이상 만족해야 함
+            # At least two of the lower body conditions must be met
             lower_conditions = [full_vertical, knee_straight, feet_grounded]
             return sum([1 for cond in lower_conditions if cond]) >= 2
         else:
-            # 상체가 수직이 아니면 모든 하체 조건 만족해야 함
+            # If upper body is not vertical, all lower body conditions must be met
             return full_vertical and knee_straight and feet_grounded
             
     else:
-        # 상체만 보이는 경우
+        # If only upper body is visible
         return upper_vertical and (shoulder_horizontal or hip_horizontal)
 
 
@@ -294,7 +281,7 @@ def is_crouching(kp, threshold_ratio=0.5):
     knee = 13     # left knee
     ankle = 15    # left ankle
     
-    # 엉덩이가 무릎 높이에 가깝고, 무릎이 구부러져 있는지 확인
+    # Check if hip is close to knee height and knee is bent
     hip_knee_dist = abs(kp[y][hip] - kp[y][knee])
     knee_bent = kp[y][knee] < kp[y][ankle]
     
@@ -353,13 +340,13 @@ def show_activities(args, image_t, output_path, annotations, dic_out):
     """Output frontal image with poses or combined with bird eye view"""
     assert 'front' in args.output_types or 'bird' in args.output_types, "outputs allowed: front and/or bird"
 
-    # 활동 정보를 저장할 딕셔너리 초기화
+    # Initialize dictionary to store activity information
     activity_info = {}
 
-    # 각 사람별로 활동 정보 수집
+    # Collect activity information for each person
     keypoint_sets, _ = get_pifpaf_outputs(annotations)
     
-    # 이전 프레임의 키포인트 저장을 위한 딕셔너리
+    # Dictionary to store previous frame's keypoints
     if not hasattr(show_activities, 'prev_keypoints'):
         show_activities.prev_keypoints = {}
 
@@ -367,10 +354,10 @@ def show_activities(args, image_t, output_path, annotations, dic_out):
         if idx not in activity_info:
             activity_info[idx] = {}
 
-        # 이전 프레임의 키포인트 가져오기
+        # Get previous frame's keypoints
         prev_kp = show_activities.prev_keypoints.get(idx)
         
-        # 각 활동 체크
+        # Check each activity
         hand_status = is_raising_hand(keypoints)
         if hand_status:
             activity_info[idx]['raising_hand'] = hand_status
@@ -384,19 +371,12 @@ def show_activities(args, image_t, output_path, annotations, dic_out):
         if is_standing(keypoints):
             activity_info[idx]['standing'] = True
 
-        if is_jumping(keypoints, prev_kp):
-            activity_info[idx]['jumping'] = True
-
-        wave_status = is_waving(keypoints, prev_kp)
-        if wave_status:
-            activity_info[idx]['waving'] = wave_status
-
         if is_crouching(keypoints):
             activity_info[idx]['crouching'] = True
 
-        # 소셜 디스턴스 체크
+        # Check social distance
         if 'social_distance' in args.activities:
-            if len(dic_out['xyz_pred']) > 1:  # 두 명 이상일 때만 체크
+            if len(dic_out['xyz_pred']) > 1:  # Check only if there are at least two people
                 social_alert = social_interactions(
                     idx, 
                     [[x[0], x[2]] for x in dic_out['xyz_pred']], 
@@ -408,10 +388,10 @@ def show_activities(args, image_t, output_path, annotations, dic_out):
                 if social_alert:
                     activity_info[idx]['social_distance'] = True
 
-        # 현재 프레임의 키포인트 저장
+        # Store current frame's keypoints
         show_activities.prev_keypoints[idx] = keypoints
 
-    # activity_info를 dic_out에 추가
+    # Add activity_info to dic_out
     dic_out['activities'] = activity_info
 
     colors = ['deepskyblue' for _ in dic_out['uv_heads']]
