@@ -92,19 +92,16 @@ def webcam(args):
     cam = cv2.VideoCapture(args.camera)
     visualizer_mono = None
 
-    # 현재 디렉토리에 logs 폴더 생성
     current_dir = os.getcwd()
     logs_dir = os.path.join(current_dir, 'logs')
     if not os.path.exists(logs_dir):
         os.makedirs(logs_dir)
 
-    # 현재 시간을 파일명에 포함
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     log_filename = os.path.join(logs_dir, f'activity_log_{timestamp}.txt')
 
-    # 로그 파일 초기화
     log_file = open(log_filename, 'w')
-    log_file.write("Time, Human ID, Activities\n")  # 헤더 작성
+    log_file.write("Time, Human ID, Activities\n")
     
     while True:
         start = time.time()
@@ -155,33 +152,28 @@ def webcam(args):
 
         # print(dic_out)
 
-        # Activity 로깅을 위한 이전 상태 저장
-        previous_activities = {}  # 각 human_id별 이전 활동 상태 저장
+        previous_activities = {}
         
-        # Activity 로깅
         if 'basic_activities' in dic_out:
             current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
             
-            # 현재 프레임의 activities 저장
             current_activities = {}
             for human_id, activities in dic_out['basic_activities'].items():
-                if activities:  # 현재 활동이 있는 경우
+                if activities:
                     current_activities[human_id] = activities
-                    previous_activities[human_id] = activities  # 이전 상태 업데이트
-                else:  # 현재 활동이 없는 경우
-                    # 이전 상태가 있으면 그것을 사용
+                    previous_activities[human_id] = activities
+                else:
                     if human_id in previous_activities:
                         current_activities[human_id] = previous_activities[human_id]
                     
-            # 로깅
             for human_id, activities in current_activities.items():
                 log_entry = f"{current_time}, Human {human_id}, {activities}\n"
                 log_file.write(log_entry)
-                log_file.flush()  # 즉시 파일에 쓰기
+                log_file.flush()
                 LOG.debug(f"Activity logged: {log_entry.strip()}")
 
-        if visualizer_mono is None:  # it is, at the beginning
-            visualizer_mono = Visualizer(kk, args)(pil_image)  # create it with the first image
+        if visualizer_mono is None:
+            visualizer_mono = Visualizer(kk, args)(pil_image)
             visualizer_mono.send(None)
 
         LOG.debug(dic_out)
@@ -190,8 +182,8 @@ def webcam(args):
         end = time.time()
         LOG.info("run-time: {:.2f} ms".format((end-start)*1000))
 
-        if not ret or key % 256 == 27:  # ESC 키를 누르거나 종료 시
-            log_file.close()  # 파일 닫기
+        if not ret or key % 256 == 27:
+            log_file.close()
             break
 
     cam.release()
