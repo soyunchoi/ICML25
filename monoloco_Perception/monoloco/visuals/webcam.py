@@ -86,14 +86,7 @@ def webcam(args):
                n_dropout=args.n_dropout, p_dropout=args.dropout)
 
     # for openpifpaf predicitons
-    predictor = openpifpaf.Predictor(
-        checkpoint=args.checkpoint,
-        visualize_image=False,
-        visualize_processed_image=False
-    )
-    
-    # decoder 설정 수정
-    predictor.model.confidence = 0.5  # confidence threshold 직접 설정
+    predictor = openpifpaf.Predictor(checkpoint=args.checkpoint)
 
     # Start recording
     cam = cv2.VideoCapture(args.camera)
@@ -162,11 +155,26 @@ def webcam(args):
 
         # print(dic_out)
 
+        # Activity 로깅을 위한 이전 상태 저장
+        previous_activities = {}  # 각 human_id별 이전 활동 상태 저장
+        
         # Activity 로깅
         if 'basic_activities' in dic_out:
             current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+            
+            # 현재 프레임의 activities 저장
+            current_activities = {}
             for human_id, activities in dic_out['basic_activities'].items():
-                # 활동 감지 여부와 관계없이 모든 사람 기록
+                if activities:  # 현재 활동이 있는 경우
+                    current_activities[human_id] = activities
+                    previous_activities[human_id] = activities  # 이전 상태 업데이트
+                else:  # 현재 활동이 없는 경우
+                    # 이전 상태가 있으면 그것을 사용
+                    if human_id in previous_activities:
+                        current_activities[human_id] = previous_activities[human_id]
+                    
+            # 로깅
+            for human_id, activities in current_activities.items():
                 log_entry = f"{current_time}, Human {human_id}, {activities}\n"
                 log_file.write(log_entry)
                 log_file.flush()  # 즉시 파일에 쓰기
