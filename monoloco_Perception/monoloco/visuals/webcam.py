@@ -106,16 +106,6 @@ def webcam(args):
     while True:
         start = time.time()
         ret, frame = cam.read()
-        
-        # 프레임을 읽지 못해도 받아온 frame을 그대로 사용
-        if not ret:
-            LOG.warning("Failed to grab frame, but proceeding with the current frame")
-        
-        # frame이 None인 경우만 처리 (카메라 연결이 완전히 끊어진 경우)
-        if frame is None:
-            LOG.error("No frame data available")
-            break
-            
         scale = (args.long_edge)/frame.shape[0]
         image = cv2.resize(frame, None, fx=scale, fy=scale)
         height, width, _ = image.shape
