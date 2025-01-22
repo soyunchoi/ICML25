@@ -231,29 +231,33 @@ def webcam(args):
             x = d * np.cos(a1)
             y = d * np.sin(a1)
             
-            # activation 정보를 숫자로 변환
-            act_num = 0  # 기본값
+            # activation 정보를 정수로 변환
+            act_num = np.int32(0)  # 기본값을 정수형으로 지정
             if 'basic_activities' in dic_out and index in dic_out['basic_activities']:
                 activities = dic_out['basic_activities'][index]
                 if 'walking' in activities:
-                    act_num = 1
+                    act_num = np.int32(1)
                 elif 'sitting' in activities:
-                    act_num = 2
+                    act_num = np.int32(2)
                 elif 'standing' in activities:
-                    act_num = 3
-                # 필요한 만큼 다른 활동 추가 가능
+                    act_num = np.int32(3)
             
-            xy_act.append([x, y, act_num])  # 위치와 활동 정보를 함께 저장
+            # numpy array로 변환하여 추가
+            xy_act.append(np.array([x, y, act_num], dtype=object))  # dtype=object로 혼합 타입 허용
             index += 1
             
         if len(xy_act) == 0:
-            x = np.full((5, 3), 15, dtype=np.float32)  # x, y는 float 유지
+            x = np.full((5, 3), 15)
+            x[:, 2] = x[:, 2].astype(np.int32)  # 세 번째 열만 정수형으로 변환
             np.save('location', x)
         else:
-            xy_act_array = np.array(xy_act)
-            # x, y는 float로, activity는 int로 변환
-            xy_act_array[:, 2] = xy_act_array[:, 2].astype(int)
-            np.save('location', xy_act_array)
+            xy_act_array = np.array(xy_act, dtype=object)  # 혼합 타입 허용
+            # x, y는 float로 유지하고 activity만 정수형으로 확실히 지정
+            final_array = np.zeros((len(xy_act), 3))
+            final_array[:, 0] = [row[0] for row in xy_act_array]  # x 좌표
+            final_array[:, 1] = [row[1] for row in xy_act_array]  # y 좌표
+            final_array[:, 2] = np.array([row[2] for row in xy_act_array], dtype=np.int32)  # activity를 정수형으로
+            np.save('location', final_array)
 
     cam.release()
     cv2.destroyAllWindows()
