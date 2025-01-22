@@ -106,6 +106,17 @@ def webcam(args):
     while True:
         start = time.time()
         ret, frame = cam.read()
+            
+        # FPS 조절을 위한 딜레이 추가
+        target_fps = 15  # 원하는 FPS 설정
+        elapsed_time = time.time() - start
+        sleep_time = max(1.0/target_fps - elapsed_time, 0)
+        time.sleep(sleep_time)
+        
+        # 현재 FPS 계산 및 출력 (선택사항)
+        actual_fps = 1.0 / (time.time() - start)
+        LOG.debug(f'Current FPS: {actual_fps:.2f}')
+            
         scale = (args.long_edge)/frame.shape[0]
         image = cv2.resize(frame, None, fx=scale, fy=scale)
         height, width, _ = image.shape
