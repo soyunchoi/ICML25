@@ -247,10 +247,13 @@ def webcam(args):
             index += 1
             
         if len(xy_act) == 0:
-            x = np.full((5, 3), 15)  # 3열로 변경 (x, y, activation)
+            x = np.full((5, 3), 15, dtype=np.float32)  # x, y는 float 유지
             np.save('location', x)
         else:
-            np.save('location', np.array(xy_act))
+            xy_act_array = np.array(xy_act)
+            # x, y는 float로, activity는 int로 변환
+            xy_act_array[:, 2] = xy_act_array[:, 2].astype(int)
+            np.save('location', xy_act_array)
 
     cam.release()
     cv2.destroyAllWindows()
