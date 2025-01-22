@@ -27,6 +27,8 @@ from ..visuals import Printer
 from ..network import Loco, preprocess_pifpaf, load_calibration
 from ..predict import download_checkpoints
 
+import numpy as np
+
 LOG = logging.getLogger(__name__)
 
 def factory_from_args(args):
@@ -196,6 +198,59 @@ def webcam(args):
         if not ret or key % 256 == 27:
             log_file.close()
             break
+
+        n_h = len(dic_out["dds_pred"])
+        w1 = {}
+        index = 0
+        xy_act = []  # 위치와 activation을 함께 저장할 리스트
+        
+        while index < n_h:
+            w1 = boxes[index][2] - boxes[index][0]
+            a1 = dic_out['angles'][index]
+            
+            # 거리 계산 (기존 코드와 동일)
+            if 120 <= w1 <= 150:
+                d = 0.35
+            if 100 <= w1 < 120:
+                d = 0.5
+            elif 80<= w1 < 100:
+                d = 1
+            elif 70<= w1 < 80:
+                d = 2
+            elif 60<= w1 < 70:
+                d = 3
+            elif 40<= w1 < 60:
+                d = 4
+            elif 20<= w1 < 40:
+                d = 5            	
+            elif w1 < 20:
+                d = 7            	
+            else:
+                d = 0.2
+                
+            x = d * np.cos(a1)
+            y = d * np.sin(a1)
+            
+            # activation 정보를 숫자로 변환
+            act_num = 0  # 기본값
+            if 'basic_activities' in dic_out and index in dic_out['basic_activities']:
+                activities = dic_out['basic_activities'][index]
+                if 'walking' in activities:
+                    act_num = 1
+                elif 'sitting' in activities:
+                    act_num = 2
+                elif 'standing' in activities:
+                    act_num = 3
+                # 필요한 만큼 다른 활동 추가 가능
+            
+            xy_act.append([x, y, act_num])  # 위치와 활동 정보를 함께 저장
+            index += 1
+            
+        if len(xy_act) == 0:
+            x = np.full((5, 3), 15)  # 3열로 변경 (x, y, activation)
+            np.save('location', x)
+        else:
+            np.save('location', np.array(xy_act))
 
     cam.release()
     cv2.destroyAllWindows()
