@@ -119,13 +119,13 @@ def is_raising_hand(kp):
 
 def check_keypoints_visibility(kp, required_points):
     """
-    Check if all required keypoints are visible and valid
+    모든 필수 keypoint들이 유효(가시)한지 검사합니다.
+    기존과 달리, keypoint 데이터의 형식(2xN 또는 N x 3)을 모두 지원합니다.
     """
-    threshold = 0.1     # Minimum value for keypoint coordinates to be considered valid
+    threshold = 0.1
     for point in required_points:
-        # Check if both x and y coordinates are below threshold
-        # which would indicate an invalid or undetected keypoint
-        if abs(kp[0][point]) < threshold and abs(kp[1][point]) < threshold:
+        x, y = get_kp_coord(kp, point)
+        if abs(x) < threshold and abs(y) < threshold:
             return False
     return True
 
@@ -272,20 +272,69 @@ def is_standing(kp, threshold_vertical=1.7):
         return upper_vertical and (shoulder_horizontal or hip_horizontal)
 
 
-def is_crouching(kp, threshold_ratio=0.5):
+def calculate_angle(a, b, c):
     """
-    Returns True if person is crouching
+    점 a, b, c가 있을 때, b를 꼭짓점으로 하는 각도를 계산합니다.
     """
-    y = 1
-    hip = 11      # left hip
-    knee = 13     # left knee
-    ankle = 15    # left ankle
+    BA = (a[0] - b[0], a[1] - b[1])
+    BC = (c[0] - b[0], c[1] - b[1])
+    dot = BA[0] * BC[0] + BA[1] * BC[1]
+    normBA = math.sqrt(BA[0] ** 2 + BA[1] ** 2)
+    normBC = math.sqrt(BC[0] ** 2 + BC[1] ** 2)
+    if normBA == 0 or normBC == 0:
+        return 180
+    cosine_angle = dot / (normBA * normBC)
+    cosine_angle = max(min(cosine_angle, 1), -1)
+    angle = math.degrees(math.acos(cosine_angle))
+    return angle
+
+
+def is_watching_phone(kp):
+    """
+    2D keypoint를 활용하여 'watching phone' (휴대폰 사용) 활동을 판별합니다.
     
-    # Check if hip is close to knee height and knee is bent
-    hip_knee_dist = abs(kp[y][hip] - kp[y][knee])
-    knee_bent = kp[y][knee] < kp[y][ankle]
-    
-    return hip_knee_dist < threshold_ratio and knee_bent
+    조건:
+      - 팔이 굽혀져 있어야 합니다. (엘보 각도가 임계값 미만)
+      - 손목이 코 근처에 위치해, 휴대폰을 들고 있는 듯한 자세여야 합니다.
+      - 고개가 아래로 숙여진 상태여야 합니다. (코의 y 좌표가 어깨 중간점보다 큼)
+    """
+    # COCO 기준 keypoint 인덱스
+    nose = 0
+    left_shoulder, right_shoulder = 5, 6
+    left_elbow, right_elbow = 7, 8
+    left_wrist, right_wrist = 9, 10
+
+    required_points = [nose, left_shoulder, right_shoulder, left_elbow, right_elbow, left_wrist, right_wrist]
+    if not check_keypoints_visibility(kp, required_points):
+        return False
+
+    nose_coord = get_kp_coord(kp, nose)
+    left_sh = get_kp_coord(kp, left_shoulder)
+    right_sh = get_kp_coord(kp, right_shoulder)
+    left_el = get_kp_coord(kp, left_elbow)
+    right_el = get_kp_coord(kp, right_elbow)
+    left_wr = get_kp_coord(kp, left_wrist)
+    right_wr = get_kp_coord(kp, right_wrist)
+
+    shoulder_mid = ((left_sh[0] + right_sh[0]) / 2, (left_sh[1] + right_sh[1]) / 2)
+    head_lowered = nose_coord[1] > shoulder_mid[1]
+
+    left_elbow_angle = calculate_angle(left_sh, left_el, left_wr)
+    right_elbow_angle = calculate_angle(right_sh, right_el, right_wr)
+
+    shoulder_distance = math.sqrt((left_sh[0] - right_sh[0]) ** 2 + (left_sh[1] - right_sh[1]) ** 2)
+    wrist_nose_threshold = shoulder_distance * 2.5
+    left_wr_nose_dist = math.sqrt((left_wr[0] - nose_coord[0]) ** 2 + (left_wr[1] - nose_coord[1]) ** 2)
+    right_wr_nose_dist = math.sqrt((right_wr[0] - nose_coord[0]) ** 2 + (right_wr[1] - nose_coord[1]) ** 2)
+
+    elbow_angle_threshold = 150
+    left_arm_bent = left_elbow_angle < elbow_angle_threshold and left_wr_nose_dist < wrist_nose_threshold
+    right_arm_bent = right_elbow_angle < elbow_angle_threshold and right_wr_nose_dist < wrist_nose_threshold
+
+    if head_lowered and (left_arm_bent or right_arm_bent):
+        return True
+    else:
+        return False
 
 
 def check_f_formations(idx, idx_t, centers, angles, radii, social_distance=False):
