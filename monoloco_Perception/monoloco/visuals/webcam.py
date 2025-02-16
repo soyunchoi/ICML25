@@ -241,6 +241,10 @@ def webcam(args):
                     act_num = np.int32(2)
                 elif 'standing' in activities:
                     act_num = np.int32(3)
+                elif 'watching_phone' in activities:
+                    act_num = np.int32(4)
+                elif 'raising_hand' in activities:
+                    act_num = np.int32(5)
             
             # numpy array로 변환하여 추가
             xy_act.append(np.array([x, y, act_num], dtype=object))  # dtype=object로 혼합 타입 허용
